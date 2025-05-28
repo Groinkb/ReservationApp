@@ -35,7 +35,7 @@ List the major technologies, libraries, and tools used in this project.
 What does someone need to install or set up before they can build and run the project?
 *   Android Studio (latest stable version recommended, e.g., Android Studio Giraffe | 2022.3.1 or newer)
 *   Kotlin Plugin
-*   ... (e.g., Specific JDK version if necessary)
+ry)
 
 ### Installation & Setup
 
@@ -53,7 +53,7 @@ Step-by-step instructions on how to get a development environment running.
 
 ## 🏗️ Project Structure (Optional)
 
-Briefly describe the main modules or key directories in your project if it helps others understand the codebase.
+
 *   `app/src/main/java/com/groink/reservationapp/`: Main application code.
     *   `ui/`: UI-related classes (Composables, Screens, Themes).
     *   `viewmodel/`: ViewModel classes.
@@ -63,7 +63,7 @@ Briefly describe the main modules or key directories in your project if it helps
 
 ## 🤝 Contributing (Optional)
 
-If this is an open-source project and you welcome contributions:
+
 1.  Fork the Project
 2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
 3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
@@ -72,8 +72,8 @@ If this is an open-source project and you welcome contributions:
 
 ## 📄 License (Optional)
 
-Specify the license for your project.
-(e.g., `Distributed under the MIT License. See LICENSE.txt for more information.`)
+
+Distributed under the MIT License. See LICENSE.txt for more information.
 
 ## 📧 Contact (Optional)
 
