@@ -7,9 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,7 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -38,8 +35,12 @@ import coil.compose.AsyncImage
 import com.groink.reservationapp.ui.theme.ReservationAppTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
 import java.util.*
+
+// FIREBASE
+import com.google.firebase.FirebaseApp
+import com.groink.reservationapp.repository.FirebaseRepository
+import com.groink.reservationapp.ui.auth.AuthScreen
 
 data class TimeSlot(
     val hour: String,
@@ -56,11 +57,6 @@ data class TerrainInfo(
     val description: String? = null
 )
 
-data class Reservation(
-    val startTime: String,
-    val duration: Int // en minutes (30, 60, 90, 120, etc.)
-)
-
 data class DayInfo(
     val date: LocalDate,
     val dayName: String,
@@ -69,8 +65,16 @@ data class DayInfo(
 )
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var firebaseRepository: FirebaseRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // INITIALISATION FIREBASE
+        FirebaseApp.initializeApp(this)
+        firebaseRepository = FirebaseRepository()
+
         enableEdgeToEdge()
         setContent {
             ReservationAppTheme {
@@ -78,7 +82,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ReservationApp()
+                    ReservationApp(firebaseRepository = firebaseRepository)
                 }
             }
         }
@@ -87,15 +91,21 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReservationApp() {
+fun ReservationApp(firebaseRepository: FirebaseRepository) {
+    var currentUser by remember { mutableStateOf<String?>(null) }
     var currentScreen by remember { mutableStateOf("calendar") }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var selectedTimeSlot by remember { mutableStateOf<String?>(null) }
-    var selectedDuration by remember { mutableStateOf(60) } // durée en minutes
+    var selectedDuration by remember { mutableStateOf(60) }
     var profileImageUri by remember { mutableStateOf<Uri?>(null) }
     var userName by remember { mutableStateOf("Utilisateur") }
-    var isAdmin by remember { mutableStateOf(false) } // Rôle admin
+    var isAdmin by remember { mutableStateOf(false) }
     var terrainInfo by remember { mutableStateOf(TerrainInfo()) }
+
+    // Vérifier si l'utilisateur est connecté au démarrage
+    LaunchedEffect(Unit) {
+        currentUser = firebaseRepository.getCurrentUserId()
+    }
 
     val context = LocalContext.current
 
@@ -103,6 +113,17 @@ fun ReservationApp() {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         profileImageUri = uri
+    }
+
+    // Si l'utilisateur n'est pas connecté, afficher l'écran d'authentification
+    if (currentUser == null) {
+        AuthScreen(
+            firebaseRepository = firebaseRepository,
+            onAuthSuccess = { userId ->
+                currentUser = userId
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -156,7 +177,8 @@ fun ReservationApp() {
                     onTimeSlotSelected = { selectedTimeSlot = it },
                     selectedDuration = selectedDuration,
                     onDurationSelected = { selectedDuration = it },
-                    terrainInfo = terrainInfo
+                    terrainInfo = terrainInfo,
+                    firebaseRepository = firebaseRepository
                 )
             }
             "profile" -> {
@@ -167,14 +189,9 @@ fun ReservationApp() {
                     onUserNameChange = { userName = it },
                     onImagePickerClick = { imagePickerLauncher.launch("image/*") },
                     isAdmin = isAdmin,
-                    onAdminToggle = { isAdmin = it }
-                )
-            }
-            "admin" -> {
-                AdminScreen(
-                    modifier = Modifier.padding(paddingValues),
-                    terrainInfo = terrainInfo,
-                    onTerrainInfoChange = { terrainInfo = it }
+                    onAdminToggle = { isAdmin = it },
+                    firebaseRepository = firebaseRepository,
+                    onSignOut = { currentUser = null }
                 )
             }
         }
@@ -190,7 +207,8 @@ fun CalendarScreen(
     onTimeSlotSelected: (String?) -> Unit,
     selectedDuration: Int,
     onDurationSelected: (Int) -> Unit,
-    terrainInfo: TerrainInfo
+    terrainInfo: TerrainInfo,
+    firebaseRepository: FirebaseRepository
 ) {
     LazyColumn(
         modifier = modifier
@@ -258,7 +276,9 @@ fun CalendarScreen(
             if (selectedTimeSlot != null) {
                 val endTime = calculateEndTime(selectedTimeSlot, selectedDuration)
                 Button(
-                    onClick = { /* Logique de réservation */ },
+                    onClick = {
+                        // TODO: Implémenter la logique de réservation Firebase
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -337,7 +357,7 @@ fun WeekCalendar(
     val days = weekDays.map { date ->
         DayInfo(
             date = date,
-            dayName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.FRENCH),
+            dayName = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.FRENCH),
             dayNumber = date.dayOfMonth.toString(),
             isSelected = date == selectedDate
         )
@@ -547,7 +567,9 @@ fun ProfileScreen(
     onUserNameChange: (String) -> Unit,
     onImagePickerClick: () -> Unit,
     isAdmin: Boolean,
-    onAdminToggle: (Boolean) -> Unit
+    onAdminToggle: (Boolean) -> Unit,
+    firebaseRepository: FirebaseRepository,
+    onSignOut: () -> Unit
 ) {
     Column(
         modifier = modifier
@@ -672,7 +694,9 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { /* Sauvegarder les modifications */ },
+                onClick = {
+                    // TODO: Sauvegarder les modifications avec Firebase
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Check, contentDescription = null)
@@ -681,7 +705,10 @@ fun ProfileScreen(
             }
 
             OutlinedButton(
-                onClick = { /* Déconnexion */ },
+                onClick = {
+                    firebaseRepository.signOut()
+                    onSignOut()
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.ExitToApp, contentDescription = null)
@@ -724,173 +751,10 @@ fun ProfileInfoItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AdminScreen(
-    modifier: Modifier = Modifier,
-    terrainInfo: TerrainInfo,
-    onTerrainInfoChange: (TerrainInfo) -> Unit
-) {
-    var nom by remember { mutableStateOf(terrainInfo.name) }
-    var surface by remember { mutableStateOf(terrainInfo.surface ?: "") }
-    var revetement by remember { mutableStateOf(terrainInfo.revetement ?: "") }
-    var eclairage by remember { mutableStateOf(terrainInfo.eclairage ?: false) }
-    var tarif by remember { mutableStateOf(terrainInfo.tarif ?: "") }
-    var description by remember { mutableStateOf(terrainInfo.description ?: "") }
-
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Text(
-                text = "Configuration du terrain",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = nom,
-                onValueChange = { nom = it },
-                label = { Text("Nom du terrain") },
-                leadingIcon = { Icon(Icons.Default.Place, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = surface,
-                onValueChange = { surface = it },
-                label = { Text("Surface (optionnel)") },
-                placeholder = { Text("ex: 400m²") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = revetement,
-                onValueChange = { revetement = it },
-                label = { Text("Revêtement (optionnel)") },
-                placeholder = { Text("ex: Gazon synthétique") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Éclairage disponible",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "Le terrain dispose d'un éclairage",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = eclairage,
-                        onCheckedChange = { eclairage = it }
-                    )
-                }
-            }
-        }
-
-        item {
-            OutlinedTextField(
-                value = tarif,
-                onValueChange = { tarif = it },
-                label = { Text("Tarif (optionnel)") },
-                placeholder = { Text("ex: 25€/heure") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                label = { Text("Description supplémentaire (optionnel)") },
-                placeholder = { Text("Informations complémentaires...") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-        }
-
-        item {
-            Button(
-                onClick = {
-                    onTerrainInfoChange(
-                        TerrainInfo(
-                            name = nom,
-                            surface = if (surface.isBlank()) null else surface,
-                            revetement = if (revetement.isBlank()) null else revetement,
-                            eclairage = if (eclairage) true else null,
-                            tarif = if (tarif.isBlank()) null else tarif,
-                            description = if (description.isBlank()) null else description
-                        )
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Sauvegarder les modifications")
-            }
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Aperçu",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TerrainInfoCard(
-                        TerrainInfo(
-                            name = nom,
-                            surface = if (surface.isBlank()) null else surface,
-                            revetement = if (revetement.isBlank()) null else revetement,
-                            eclairage = if (eclairage) true else null,
-                            tarif = if (tarif.isBlank()) null else tarif,
-                            description = if (description.isBlank()) null else description
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
 fun ReservationAppPreview() {
     ReservationAppTheme {
-        ReservationApp()
+        // Preview ne peut pas utiliser FirebaseRepository
     }
 }

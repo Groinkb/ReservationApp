@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.groink.reservationapp" />
+                  <option name="mobileSdkAppId" value="1:1009167728855:android:cd001b6aba00bca8383092" />
+                  <option name="projectId" value="myapplication-1291e94d" />
+                  <option name="projectNumber" value="1009167728855" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
