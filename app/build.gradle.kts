@@ -49,7 +49,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3) // Material 3
     implementation("androidx.navigation:navigation-compose:2.7.5") // Use a known stable version or your desired one
-
+    implementation("io.coil-kt:coil-compose:2.4.0")
     // Temporarily comment out other dependencies to isolate the issue
     // implementation "androidx.compose.ui:ui:$compose_version"
     // implementation "androidx.compose.ui:ui-tooling-preview:$compose_version"
