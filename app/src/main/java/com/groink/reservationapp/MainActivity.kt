@@ -47,6 +47,20 @@ data class TimeSlot(
     val isSelected: Boolean = false
 )
 
+data class TerrainInfo(
+    val name: String = "Terrain Polyvalent",
+    val surface: String? = null,
+    val revetement: String? = null,
+    val eclairage: Boolean? = null,
+    val tarif: String? = null,
+    val description: String? = null
+)
+
+data class Reservation(
+    val startTime: String,
+    val duration: Int // en minutes (30, 60, 90, 120, etc.)
+)
+
 data class DayInfo(
     val date: LocalDate,
     val dayName: String,
@@ -77,8 +91,11 @@ fun ReservationApp() {
     var currentScreen by remember { mutableStateOf("calendar") }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var selectedTimeSlot by remember { mutableStateOf<String?>(null) }
+    var selectedDuration by remember { mutableStateOf(60) } // durée en minutes
     var profileImageUri by remember { mutableStateOf<Uri?>(null) }
     var userName by remember { mutableStateOf("Utilisateur") }
+    var isAdmin by remember { mutableStateOf(false) } // Rôle admin
+    var terrainInfo by remember { mutableStateOf(TerrainInfo()) }
 
     val context = LocalContext.current
 
@@ -96,17 +113,33 @@ fun ReservationApp() {
                         when(currentScreen) {
                             "calendar" -> "Réservation Terrain"
                             "profile" -> "Mon Profil"
+                            "admin" -> "Administration"
                             else -> "Terrain"
                         }
                     )
                 },
                 actions = {
+                    if (isAdmin && currentScreen != "admin") {
+                        IconButton(onClick = { currentScreen = "admin" }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Administration")
+                        }
+                    }
                     IconButton(onClick = {
-                        currentScreen = if (currentScreen == "profile") "calendar" else "profile"
+                        currentScreen = when(currentScreen) {
+                            "profile" -> "calendar"
+                            "admin" -> "calendar"
+                            else -> "profile"
+                        }
                     }) {
                         Icon(
-                            if (currentScreen == "profile") Icons.Default.DateRange else Icons.Default.Person,
-                            contentDescription = if (currentScreen == "profile") "Calendrier" else "Profil"
+                            when(currentScreen) {
+                                "profile", "admin" -> Icons.Default.DateRange
+                                else -> Icons.Default.Person
+                            },
+                            contentDescription = when(currentScreen) {
+                                "profile", "admin" -> "Calendrier"
+                                else -> "Profil"
+                            }
                         )
                     }
                 }
@@ -120,7 +153,10 @@ fun ReservationApp() {
                     selectedDate = selectedDate,
                     onDateSelected = { selectedDate = it },
                     selectedTimeSlot = selectedTimeSlot,
-                    onTimeSlotSelected = { selectedTimeSlot = it }
+                    onTimeSlotSelected = { selectedTimeSlot = it },
+                    selectedDuration = selectedDuration,
+                    onDurationSelected = { selectedDuration = it },
+                    terrainInfo = terrainInfo
                 )
             }
             "profile" -> {
@@ -129,7 +165,16 @@ fun ReservationApp() {
                     profileImageUri = profileImageUri,
                     userName = userName,
                     onUserNameChange = { userName = it },
-                    onImagePickerClick = { imagePickerLauncher.launch("image/*") }
+                    onImagePickerClick = { imagePickerLauncher.launch("image/*") },
+                    isAdmin = isAdmin,
+                    onAdminToggle = { isAdmin = it }
+                )
+            }
+            "admin" -> {
+                AdminScreen(
+                    modifier = Modifier.padding(paddingValues),
+                    terrainInfo = terrainInfo,
+                    onTerrainInfoChange = { terrainInfo = it }
                 )
             }
         }
@@ -142,7 +187,10 @@ fun CalendarScreen(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
     selectedTimeSlot: String?,
-    onTimeSlotSelected: (String?) -> Unit
+    onTimeSlotSelected: (String?) -> Unit,
+    selectedDuration: Int,
+    onDurationSelected: (Int) -> Unit,
+    terrainInfo: TerrainInfo
 ) {
     LazyColumn(
         modifier = modifier
@@ -152,7 +200,7 @@ fun CalendarScreen(
     ) {
         // Section Terrain
         item {
-            TerrainInfoCard()
+            TerrainInfoCard(terrainInfo)
         }
 
         // Section Calendrier
@@ -187,9 +235,28 @@ fun CalendarScreen(
             )
         }
 
+        // Section Durée
+        if (selectedTimeSlot != null) {
+            item {
+                Text(
+                    text = "Durée de réservation",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            item {
+                DurationSelector(
+                    selectedDuration = selectedDuration,
+                    onDurationSelected = onDurationSelected
+                )
+            }
+        }
+
         // Bouton de réservation
         item {
             if (selectedTimeSlot != null) {
+                val endTime = calculateEndTime(selectedTimeSlot, selectedDuration)
                 Button(
                     onClick = { /* Logique de réservation */ },
                     modifier = Modifier
@@ -200,8 +267,8 @@ fun CalendarScreen(
                     )
                 ) {
                     Text(
-                        text = "Réserver le ${selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))} à $selectedTimeSlot",
-                        fontSize = 16.sp
+                        text = "Réserver le ${selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))} de $selectedTimeSlot à $endTime",
+                        fontSize = 14.sp
                     )
                 }
             }
@@ -210,7 +277,7 @@ fun CalendarScreen(
 }
 
 @Composable
-fun TerrainInfoCard() {
+fun TerrainInfoCard(terrainInfo: TerrainInfo) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -229,19 +296,32 @@ fun TerrainInfoCard() {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Terrain Polyvalent",
+                    text = terrainInfo.name,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            if (terrainInfo.surface != null || terrainInfo.revetement != null ||
+                terrainInfo.eclairage != null || terrainInfo.tarif != null ||
+                terrainInfo.description != null) {
 
-            Text(
-                text = "• Surface : 400m²\n• Revêtement : Gazon synthétique\n• Éclairage : Disponible\n• Tarif : 25€/heure",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val details = buildList {
+                    terrainInfo.surface?.let { add("Surface : $it") }
+                    terrainInfo.revetement?.let { add("Revêtement : $it") }
+                    terrainInfo.eclairage?.let { if (it) add("Éclairage : Disponible") }
+                    terrainInfo.tarif?.let { add("Tarif : $it") }
+                    terrainInfo.description?.let { add(it) }
+                }
+
+                Text(
+                    text = details.joinToString("\n") { "• $it" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -384,6 +464,80 @@ fun TimeSlotItem(
     }
 }
 
+@Composable
+fun DurationSelector(
+    selectedDuration: Int,
+    onDurationSelected: (Int) -> Unit
+) {
+    val durations = listOf(30, 60, 90, 120, 150, 180) // en minutes
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.height(120.dp)
+    ) {
+        items(durations) { duration ->
+            DurationItem(
+                duration = duration,
+                isSelected = selectedDuration == duration,
+                onClick = { onDurationSelected(duration) }
+            )
+        }
+    }
+}
+
+@Composable
+fun DurationItem(
+    duration: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 8.dp else 2.dp
+        )
+    ) {
+        Text(
+            text = formatDuration(duration),
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 14.sp
+        )
+    }
+}
+
+fun formatDuration(minutes: Int): String {
+    return when {
+        minutes < 60 -> "${minutes}min"
+        minutes % 60 == 0 -> "${minutes / 60}h"
+        else -> "${minutes / 60}h${minutes % 60}min"
+    }
+}
+
+fun calculateEndTime(startTime: String, durationMinutes: Int): String {
+    val parts = startTime.split(":")
+    val hours = parts[0].toInt()
+    val minutes = parts[1].toInt()
+
+    val totalMinutes = hours * 60 + minutes + durationMinutes
+    val endHours = (totalMinutes / 60) % 24
+    val endMinutes = totalMinutes % 60
+
+    return String.format("%02d:%02d", endHours, endMinutes)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -391,7 +545,9 @@ fun ProfileScreen(
     profileImageUri: Uri?,
     userName: String,
     onUserNameChange: (String) -> Unit,
-    onImagePickerClick: () -> Unit
+    onImagePickerClick: () -> Unit,
+    isAdmin: Boolean,
+    onAdminToggle: (Boolean) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -482,6 +638,32 @@ fun ProfileScreen(
                     label = "Membre depuis",
                     value = "Janvier 2024"
                 )
+
+                // Toggle admin pour le développement
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Mode Administrateur",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Switch(
+                        checked = isAdmin,
+                        onCheckedChange = onAdminToggle
+                    )
+                }
             }
         }
 
@@ -538,6 +720,169 @@ fun ProfileInfoItem(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminScreen(
+    modifier: Modifier = Modifier,
+    terrainInfo: TerrainInfo,
+    onTerrainInfoChange: (TerrainInfo) -> Unit
+) {
+    var nom by remember { mutableStateOf(terrainInfo.name) }
+    var surface by remember { mutableStateOf(terrainInfo.surface ?: "") }
+    var revetement by remember { mutableStateOf(terrainInfo.revetement ?: "") }
+    var eclairage by remember { mutableStateOf(terrainInfo.eclairage ?: false) }
+    var tarif by remember { mutableStateOf(terrainInfo.tarif ?: "") }
+    var description by remember { mutableStateOf(terrainInfo.description ?: "") }
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                text = "Configuration du terrain",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = nom,
+                onValueChange = { nom = it },
+                label = { Text("Nom du terrain") },
+                leadingIcon = { Icon(Icons.Default.Place, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = surface,
+                onValueChange = { surface = it },
+                label = { Text("Surface (optionnel)") },
+                placeholder = { Text("ex: 400m²") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = revetement,
+                onValueChange = { revetement = it },
+                label = { Text("Revêtement (optionnel)") },
+                placeholder = { Text("ex: Gazon synthétique") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Éclairage disponible",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "Le terrain dispose d'un éclairage",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = eclairage,
+                        onCheckedChange = { eclairage = it }
+                    )
+                }
+            }
+        }
+
+        item {
+            OutlinedTextField(
+                value = tarif,
+                onValueChange = { tarif = it },
+                label = { Text("Tarif (optionnel)") },
+                placeholder = { Text("ex: 25€/heure") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Description supplémentaire (optionnel)") },
+                placeholder = { Text("Informations complémentaires...") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
+            )
+        }
+
+        item {
+            Button(
+                onClick = {
+                    onTerrainInfoChange(
+                        TerrainInfo(
+                            name = nom,
+                            surface = if (surface.isBlank()) null else surface,
+                            revetement = if (revetement.isBlank()) null else revetement,
+                            eclairage = if (eclairage) true else null,
+                            tarif = if (tarif.isBlank()) null else tarif,
+                            description = if (description.isBlank()) null else description
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sauvegarder les modifications")
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Aperçu",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TerrainInfoCard(
+                        TerrainInfo(
+                            name = nom,
+                            surface = if (surface.isBlank()) null else surface,
+                            revetement = if (revetement.isBlank()) null else revetement,
+                            eclairage = if (eclairage) true else null,
+                            tarif = if (tarif.isBlank()) null else tarif,
+                            description = if (description.isBlank()) null else description
+                        )
+                    )
+                }
+            }
         }
     }
 }
