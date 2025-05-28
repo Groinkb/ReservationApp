@@ -3,9 +3,12 @@
 Reservation app to reserve a place. 
 
 
-[img.png](img.png) -->
-[img_1.png](img_1.png) 
-[img_2.png](img_2.png) -->
+![img.png](img.png)
+
+![img_1.png](img_1.png)
+
+![img_2.png](img_2.png)
+
 
 ## ✨ Features
 
